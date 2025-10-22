@@ -16,19 +16,40 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ✅ Middleware
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.CLIENT_ORIGIN,
+  "https://instachatapp.netlify.app",
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: "*",
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // allow non-browser tools
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-      "Origin"
-    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    optionsSuccessStatus: 200,
+  })
+);
 
+// Preflight (scope to avoid Express v5 '*' pattern crash)
+app.options([
+  "/",
+  "/api/*",
+],
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   })
 );
 
@@ -58,10 +79,9 @@ export default app;
 // ✅ Start server with Socket.io locally (ignored by Vercel)
 if (process.env.VERCEL !== '1') {
   const server = http.createServer(app);
-  const allowedOrigin = process.env.CLIENT_ORIGIN || "https://instachatapp.netlify.app";
   const io = new SocketIOServer(server, {
     cors: {
-      origin: "*",
+      origin: allowedOrigins,
       methods: ["GET", "POST"],
       credentials: true,
     },
