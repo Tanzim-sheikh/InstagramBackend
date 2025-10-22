@@ -58,7 +58,7 @@ export default app;
 // ✅ Start server with Socket.io locally (ignored by Vercel)
 if (process.env.VERCEL !== '1') {
   const server = http.createServer(app);
-  const allowedOrigin = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+  const allowedOrigin = process.env.CLIENT_ORIGIN || "https://instachatapp.netlify.app";
   const io = new SocketIOServer(server, {
     cors: {
       origin: allowedOrigin,
