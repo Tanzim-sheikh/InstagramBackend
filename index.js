@@ -36,22 +36,7 @@ app.use(
   })
 );
 
-// Preflight (scope to avoid Express v5 '*' pattern crash)
-app.options([
-  "/",
-  "/api/*",
-],
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  })
-);
+// Note: Global cors() above will handle OPTIONS preflight automatically in Express v5.
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
