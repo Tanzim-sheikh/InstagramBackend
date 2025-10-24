@@ -152,6 +152,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
 import connectDB from "./src/helper/config/mongoDB.js";
 import userRoutes from "./src/API/user/index.js";
 import { verifyTransport } from "./src/helper/common/mailer.js";
@@ -220,31 +222,89 @@ app.get("/api/socket-info", (req, res) => {
 // ✅ Export app for Vercel
 export default app;
 
-// ✅ Socket.io code ONLY for local development
-if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
-  import('http').then(http => {
-    import('socket.io').then(socketIo => {
-      const server = http.createServer(app);
-      const io = new socketIo.Server(server, {
-        cors: {
-          origin: allowedOrigins,
-          methods: ["GET", "POST"],
-          credentials: true,
-        },
-      });
+// ✅ Socket.io server for any non-Vercel platform (e.g., Render, Railway) and local dev
+if (process.env.VERCEL !== '1') {
+  const server = http.createServer(app);
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error("Not allowed by CORS"));
+      },
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+  });
 
-      // Your existing socket.io code here...
-      const roomIdFor = (a, b) => [String(a), String(b)].sort().join("_");
-      const userSockets = new Map();
+  const roomIdFor = (a, b) => [String(a), String(b)].sort().join("_");
+  const userSockets = new Map(); // userId -> Set<socketId>
 
-      io.on("connection", (socket) => {
-        console.log("User connected locally:", socket.id);
-        // ... rest of your socket code
-      });
+  const emitOnlineUsers = () => {
+    const online = Array.from(userSockets.keys());
+    io.emit("onlineUsers", online);
+  };
 
-      server.listen(PORT, () => {
-        console.log(`🚀 Local Server with Socket.io on http://localhost:${PORT}`);
-      });
+  io.on("connection", (socket) => {
+    socket.on("register", ({ userId }) => {
+      if (!userId) return;
+      const key = String(userId);
+      const set = userSockets.get(key) || new Set();
+      set.add(socket.id);
+      userSockets.set(key, set);
+      emitOnlineUsers();
     });
+
+    socket.on("typing", ({ senderId, receiverId }) => {
+      if (!senderId || !receiverId) return;
+      const room = roomIdFor(senderId, receiverId);
+      io.to(room).emit("typing", { from: String(senderId) });
+    });
+
+    socket.on("joinRoom", ({ senderId, receiverId }) => {
+      if (!senderId || !receiverId) return;
+      const room = roomIdFor(senderId, receiverId);
+      socket.join(room);
+    });
+
+    socket.on("sendMessage", async ({ senderId, receiverId, message }) => {
+      if (!senderId || !receiverId || !message) return;
+      try {
+        // Lazily import to avoid circulars on serverless export
+        const { default: MessageModel } = await import("./src/modules/messageModel.js");
+        const doc = await MessageModel.create({ senderId, receiverId, message });
+        const payload = {
+          _id: doc._id,
+          senderId: String(doc.senderId),
+          receiverId: String(doc.receiverId),
+          message: doc.message,
+          createdAt: doc.createdAt,
+        };
+        const room = roomIdFor(senderId, receiverId);
+        io.to(room).emit("receiveMessage", payload);
+        const recKey = String(receiverId);
+        const targets = userSockets.get(recKey);
+        if (targets) {
+          for (const sid of targets) io.to(sid).emit("unreadIncrement", { from: String(senderId) });
+        }
+      } catch (_) {
+        // optional error handling
+      }
+    });
+
+    socket.on("disconnect", () => {
+      for (const [uid, set] of userSockets.entries()) {
+        if (set.has(socket.id)) {
+          set.delete(socket.id);
+          if (set.size === 0) userSockets.delete(uid);
+          break;
+        }
+      }
+      emitOnlineUsers();
+    });
+  });
+
+  server.listen(PORT, () => {
+    console.log(`🚀 Server with Socket.io listening on port ${PORT}`);
   });
 }
