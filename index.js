@@ -10,7 +10,9 @@ import { getMessages, getUnreadSummary, markRead } from "./src/API/chat/chatCont
 import MessageModel from "./src/modules/messageModel.js";
 import { protect } from "./src/helper/common/authMiddleware.js";
 
-dotenv.config();
+if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
+  dotenv.config();
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
