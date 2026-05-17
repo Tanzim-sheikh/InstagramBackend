@@ -171,7 +171,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   "http://localhost:5173",
   process.env.CLIENT_ORIGIN,
-  "https://instachatapp.netlify.app",
+  "https://nexa-chats.netlify.app",
 ].filter(Boolean);
 
 const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
