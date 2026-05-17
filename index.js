@@ -174,11 +174,30 @@ const allowedOrigins = [
   "https://instachatapp.netlify.app",
 ].filter(Boolean);
 
+const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (isAllowedOrigin(origin)) {
+    if (origin) res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Vary", "Origin");
+  }
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    req.headers["access-control-request-headers"] || "Content-Type,Authorization,X-Requested-With,Accept"
+  );
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  return next();
+});
+
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (isAllowedOrigin(origin)) return cb(null, true);
       return cb(new Error("Not allowed by CORS"));
     },
     credentials: true,
