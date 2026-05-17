@@ -4,13 +4,36 @@ import generateOTP from "../../helper/common/generateOTP.js";
 import { uploadBuffer } from "../../helper/common/cloudinary.js";
 import { sendVerificationEmail, sendPasswordResetEmail } from "./email.js";
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+
+const validatePassword = (password) => {
+  if (!password) return "Password is required";
+  if (password.length < 8) return "Password must be at least 8 characters";
+  if (!/[A-Z]/.test(password)) return "Password must include an uppercase letter";
+  if (!/[a-z]/.test(password)) return "Password must include a lowercase letter";
+  if (!/\d/.test(password)) return "Password must include a number";
+  return "";
+};
+
 export const signupUser = async ({ name, email, password, fileBuffer }) => {
-  if (!name || !email || !password) {
+  const cleanName = String(name || "").trim();
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanName || !cleanEmail || !password) {
     return { status: 400, body: { message: "Name, email and password are required" } };
 
   }
+  if (cleanName.length < 2) {
+    return { status: 400, body: { message: "Name must be at least 2 characters" } };
+  }
+  if (!emailPattern.test(cleanEmail)) {
+    return { status: 400, body: { message: "Please enter a valid email address" } };
+  }
+  const passwordError = validatePassword(password);
+  if (passwordError) return { status: 400, body: { message: passwordError } };
 
-  const existing = await userModel.findOne({ email });
+  const existing = await userModel.findOne({ email: cleanEmail });
   if (existing) {
     return { status: 400, body: { message: "Email already registered" } };
   }
@@ -29,8 +52,8 @@ export const signupUser = async ({ name, email, password, fileBuffer }) => {
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   const user = await userModel.create({
-    name,
-    email,
+    name: cleanName,
+    email: cleanEmail,
     password,
     profilePhoto,
     isVerified: false,
@@ -40,7 +63,7 @@ export const signupUser = async ({ name, email, password, fileBuffer }) => {
 
   let emailSent = true;
   try {
-    await sendVerificationEmail({ name, email, otp });
+    await sendVerificationEmail({ name: cleanName, email: cleanEmail, otp });
   } catch (_) {
     emailSent = false;
   }
@@ -57,8 +80,10 @@ export const signupUser = async ({ name, email, password, fileBuffer }) => {
 };
 
 export const verifyEmail = async ({ email, otp }) => {
-  if (!email || !otp) return { status: 400, body: { message: "Email and OTP are required" } };
-  const user = await userModel.findOne({ email });
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail || !otp) return { status: 400, body: { message: "Email and OTP are required" } };
+  if (!emailPattern.test(cleanEmail)) return { status: 400, body: { message: "Please enter a valid email address" } };
+  const user = await userModel.findOne({ email: cleanEmail });
   if (!user) return { status: 404, body: { message: "User not found" } };
   if (user.isVerified) return { status: 200, body: { message: "Email already verified" } };
   if (!user.otp || !user.otpExpiry || user.otp !== String(otp) || user.otpExpiry < new Date()) {
@@ -72,10 +97,12 @@ export const verifyEmail = async ({ email, otp }) => {
 };
 
 export const loginUser = async ({ email, password }) => {
-  if (!email || !password) {
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail || !password) {
     return { status: 400, body: { message: "Email and password are required" } };
   }
-  const user = await userModel.findOne({ email });
+  if (!emailPattern.test(cleanEmail)) return { status: 400, body: { message: "Please enter a valid email address" } };
+  const user = await userModel.findOne({ email: cleanEmail });
   if (!user) return { status: 401, body: { message: "Invalid credentials" } };
   const match = await user.matchPassword(password);
   if (!match) return { status: 401, body: { message: "Invalid credentials" } };
@@ -102,23 +129,29 @@ export const getProfile = async ({ userId }) => {
 };
 
 export const requestPasswordReset = async ({ email }) => {
-  if (!email) return { status: 400, body: { message: "Email is required" } };
-  const user = await userModel.findOne({ email });
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail) return { status: 400, body: { message: "Email is required" } };
+  if (!emailPattern.test(cleanEmail)) return { status: 400, body: { message: "Please enter a valid email address" } };
+  const user = await userModel.findOne({ email: cleanEmail });
   if (!user) return { status: 200, body: { message: "If the email exists, a reset code has been sent" } };
   const otp = String(generateOTP());
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
   user.otp = otp;
   user.otpExpiry = otpExpiry;
   await user.save();
-  await sendPasswordResetEmail({ name: user.name, email, otp });
+  await sendPasswordResetEmail({ name: user.name, email: cleanEmail, otp });
   return { status: 200, body: { message: "If the email exists, a reset code has been sent" } };
 };
 
 export const resetPassword = async ({ email, otp, newPassword }) => {
-  if (!email || !otp || !newPassword) {
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail || !otp || !newPassword) {
     return { status: 400, body: { message: "Email, OTP and newPassword are required" } };
   }
-  const user = await userModel.findOne({ email });
+  if (!emailPattern.test(cleanEmail)) return { status: 400, body: { message: "Please enter a valid email address" } };
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) return { status: 400, body: { message: passwordError } };
+  const user = await userModel.findOne({ email: cleanEmail });
   if (!user) return { status: 404, body: { message: "User not found" } };
   if (!user.otp || !user.otpExpiry || user.otp !== String(otp) || user.otpExpiry < new Date()) {
     return { status: 400, body: { message: "Invalid or expired OTP" } };
@@ -131,8 +164,10 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
 };
 
 export const resendOtp = async ({ email }) => {
-  if (!email) return { status: 400, body: { message: "Email is required" } };
-  const user = await userModel.findOne({ email });
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail) return { status: 400, body: { message: "Email is required" } };
+  if (!emailPattern.test(cleanEmail)) return { status: 400, body: { message: "Please enter a valid email address" } };
+  const user = await userModel.findOne({ email: cleanEmail });
   if (!user) return { status: 404, body: { message: "User not found" } };
   const otp = String(generateOTP());
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -141,7 +176,7 @@ export const resendOtp = async ({ email }) => {
   await user.save();
   let emailSent = true;
   try {
-    await sendVerificationEmail({ name: user.name, email, otp });
+    await sendVerificationEmail({ name: user.name, email: cleanEmail, otp });
   } catch (_) {
     emailSent = false;
   }

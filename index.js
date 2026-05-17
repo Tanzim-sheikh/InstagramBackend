@@ -21,7 +21,7 @@
 // const allowedOrigins = [
 //   "http://localhost:5173",
 //   process.env.CLIENT_ORIGIN,
-//   "https://instachatapp.netlify.app",
+//   "https://nexachatapp.netlify.app",
 // ].filter(Boolean);
 
 // app.use(
@@ -171,7 +171,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   "http://localhost:5173",
   process.env.CLIENT_ORIGIN,
-  "https://instachatapp.netlify.app",
+  "https://nexachatapp.netlify.app",
 ].filter(Boolean);
 
 app.use(
@@ -278,6 +278,7 @@ if (process.env.VERCEL !== '1') {
           senderId: String(doc.senderId),
           receiverId: String(doc.receiverId),
           message: doc.message,
+          read: doc.read,
           createdAt: doc.createdAt,
         };
         const room = roomIdFor(senderId, receiverId);

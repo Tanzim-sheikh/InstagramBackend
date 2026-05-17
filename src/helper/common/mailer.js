@@ -34,7 +34,7 @@ const transporter = createTransporter();
 export const sendMail = async ({ to, subject, html }) => {
   const { user } = ensureEnv();
   const mailOptions = {
-    from: `Instagram Clone <${user}>`,
+    from: `NexaChat <${user}>`,
     to,
     subject,
     html,
